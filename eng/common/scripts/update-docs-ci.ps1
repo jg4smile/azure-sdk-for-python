@@ -1,6 +1,4 @@
-# Note, due to how `Expand-Archive` is leveraged in this script,
-# powershell core is a requirement for successful execution.
-
+#Requires -Version 6.0
 # This script is intended to  update docs.ms CI configuration (currently supports Java, Python, C#, JS)
 # as part of the azure-sdk release. For details on calling, check `archtype-<language>-release` in each azure-sdk
 # repository.
@@ -89,7 +87,9 @@ function UpdateParamsJsonPython($pkgs, $ciRepo, $locationInDocRepo){
     }
   }
 
-  Set-Content -Path $pkgJsonLoc -Value ($allJson | ConvertTo-Json -Depth 10 | % {$_ -replace "(?m)  (?<=^(?:  )*)", "  " })
+  $jsonContent = $allJson | ConvertTo-Json -Depth 10 | % {$_ -replace "(?m)  (?<=^(?:  )*)", "  " }
+
+  Set-Content -Path $pkgJsonLoc -Value $jsonContent
 }
 
 # Updates a js CI configuration json.
@@ -134,7 +134,9 @@ function UpdateParamsJsonJS($pkgs, $ciRepo, $locationInDocRepo){
     }
   }
 
-  Set-Content -Path $pkgJsonLoc -Value ($allJson | ConvertTo-Json -Depth 10 | % {$_ -replace "(?m)  (?<=^(?:  )*)", "  " })
+  $jsonContent = $allJson | ConvertTo-Json -Depth 10 | % {$_ -replace "(?m)  (?<=^(?:  )*)", "  " }
+
+  Set-Content -Path $pkgJsonLoc -Value $jsonContent
 }
 
 # details on CSV schema can be found here
@@ -192,19 +194,17 @@ function UpdatePackageJson($pkgs, $ciRepo, $locationInDocRepo, $monikerId){
 
   $allJsonData = Get-Content $pkgJsonLoc | ConvertFrom-Json
 
-  $targetData = $allJsonData[$monikerId]
-
   $visibleInCI = @{}
 
-  for ($i=0; $i -lt $targetData.packages.Length; $i++) {
-    $pkgDef = $targetData.packages[$i]
+  for ($i=0; $i -lt $allJsonData[$monikerId].packages.Length; $i++) {
+    $pkgDef = $allJsonData[$monikerId].packages[$i]
     $visibleInCI[$pkgDef.packageArtifactId] = $i
   }
 
   foreach ($releasingPkg in $pkgs) {
     if ($visibleInCI.ContainsKey($releasingPkg.PackageId)) {
       $packagesIndex = $visibleInCI[$releasingPkg.PackageId]
-      $existingPackageDef = $targetData.packages[$packagesIndex]
+      $existingPackageDef = $allJsonData[$monikerId].packages[$packagesIndex]
       $existingPackageDef.packageVersion = $releasingPkg.PackageVersion
     }
     else {
@@ -217,11 +217,13 @@ function UpdatePackageJson($pkgs, $ciRepo, $locationInDocRepo, $monikerId){
         excludePath = @()
       }
 
-      $targetData.packages.Append($newItem)
+      $allJsonData[$monikerId].packages += $newItem
     }
   }
 
-  Set-Content -Path $pkgJsonLoc -Value ($allJsonData | ConvertTo-Json -Depth 10 | % {$_ -replace "(?m)  (?<=^(?:  )*)", "    " })
+  $jsonContent = $allJsonData | ConvertTo-Json -Depth 10 | % {$_ -replace "(?m)  (?<=^(?:  )*)", "    " }
+
+  Set-Content -Path $pkgJsonLoc -Value $jsonContent
 }
 
 $targets = ($Configs | ConvertFrom-Json).targets
@@ -238,8 +240,6 @@ $pkgs = VerifyPackages -pkgRepository $Repository `
   -workingDirectory $WorkDirectory `
   -apiUrl $apiUrl `
   -continueOnError $True 
-
-Write-Host "Before: $pkgs"
 
 foreach ($config in $targets) {
   if ($config.mode -eq "Preview") { $includePreview = $true } else { $includePreview = $false }
